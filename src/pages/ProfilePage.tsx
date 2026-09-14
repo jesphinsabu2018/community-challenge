@@ -12,6 +12,7 @@ export function ProfilePage({ onNavigate }: ProfilePageProps) {
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
@@ -22,22 +23,59 @@ export function ProfilePage({ onNavigate }: ProfilePageProps) {
     if (!user) return;
     (async () => {
       setLoading(true);
+      setError(null);
       try {
-        const p = await fetchProfile(user.id);
+        const p = await Promise.race([
+          fetchProfile(user.id),
+          new Promise<null>((_, reject) => {
+            window.setTimeout(() => reject(new Error('Profile request timed out.')), 5000);
+          }),
+        ]);
+        if (!p) throw new Error('Profile data was not found.');
         setProfile(p);
         setUsername(p?.username ?? '');
         setBio(p?.bio ?? '');
         setAvatarUrl(p?.avatar_url ?? '');
-        const subs = await fetchUserSubmissions();
-        const enriched = await Promise.all(
-          subs.map(async (s) => {
-            const ch = await fetchChallenge(s.challenge_id);
-            return { ...s, challenge: ch ?? undefined };
-          })
-        );
-        setSubmissions(enriched);
+        setLoading(false);
+
+        try {
+          const subs = await fetchUserSubmissions();
+          const enriched = await Promise.all(
+            subs.map(async (s) => {
+              try {
+                const ch = await fetchChallenge(s.challenge_id);
+                return { ...s, challenge: ch ?? undefined };
+              } catch {
+                return { ...s, challenge: undefined };
+              }
+            })
+          );
+          setSubmissions(enriched);
+        } catch (error) {
+          console.error('Unable to load profile submissions', error);
+          setSubmissions([]);
+        }
       } catch (e) {
         console.error(e);
+        const fallbackProfile: Profile = {
+          id: user.id,
+          username: user.email.split('@')[0] || 'Profile',
+          avatar_url: null,
+          bio: '',
+          is_moderator: false,
+          challenges_joined: 0,
+          challenges_completed: 0,
+          challenges_in_progress: 0,
+          challenges_failed: 0,
+          average_score: 0,
+          consistency_streak: 0,
+          created_at: new Date().toISOString(),
+        };
+        setProfile(fallbackProfile);
+        setUsername(fallbackProfile.username);
+        setBio(fallbackProfile.bio);
+        setAvatarUrl('');
+        setError(null);
       } finally {
         setLoading(false);
       }
@@ -67,10 +105,24 @@ export function ProfilePage({ onNavigate }: ProfilePageProps) {
     );
   }
 
-  if (loading || !profile) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center">
+        <p className="text-slate-500 mb-4">{error ?? 'Unable to load your profile.'}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
