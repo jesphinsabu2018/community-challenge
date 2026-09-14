@@ -1,8 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
 import type { Profile } from '@/types';
 import { fetchProfile } from '@/lib/api';
+
+export interface User {
+  id: string;
+  email: string;
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -18,49 +21,37 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    const savedUser = localStorage.getItem('fairplay_user');
+    if (!savedUser) return;
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      (async () => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          const p = await fetchProfile(session.user.id);
-          setProfile(p);
-        } else {
-          setProfile(null);
-        }
-      })();
-    });
-
-    return () => listener.subscription.unsubscribe();
+    const parsedUser = JSON.parse(savedUser) as User;
+    setUser(parsedUser);
+    fetchProfile(parsedUser.id).then(setProfile).catch(() => setProfile(null));
   }, []);
 
   const signUp = async (email: string, password: string, username: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { username } },
-    });
-    if (error) throw error;
-    if (data.user) {
-      const p = await fetchProfile(data.user.id);
-      setProfile(p);
-    }
+    void password;
+    void username;
+    const newUser = { id: crypto.randomUUID(), email };
+    localStorage.setItem('fairplay_user', JSON.stringify(newUser));
+    setUser(newUser);
+    fetchProfile(newUser.id).then(setProfile).catch(() => setProfile(null));
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    void password;
+    const newUser = { id: crypto.randomUUID(), email };
+    localStorage.setItem('fairplay_user', JSON.stringify(newUser));
+    setUser(newUser);
+    fetchProfile(newUser.id).then(setProfile).catch(() => setProfile(null));
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem('fairplay_user');
+    setUser(null);
     setProfile(null);
   };
 

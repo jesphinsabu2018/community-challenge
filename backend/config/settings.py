@@ -26,12 +26,11 @@ USE_TZ = True
 STATIC_URL = 'static/'
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',') if origin.strip()]
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ['challenges.authentication.SupabaseJWTAuthentication'],
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_AUTHENTICATION_CLASSES': ['challenges.authentication.LocalUserAuthentication'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
     'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.AnonRateThrottle', 'rest_framework.throttling.UserRateThrottle'],
     'DEFAULT_THROTTLE_RATES': {'anon': '30/minute', 'user': '120/minute', 'vote': '50/day', 'submission': '10/hour'},
 }
-SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET', '')
 SCORE_COMMUNITY_CAP = float(os.getenv('SCORE_COMMUNITY_CAP', '10'))
 SCORE_CONSISTENCY_BONUS_CAP = float(os.getenv('SCORE_CONSISTENCY_BONUS_CAP', '8'))
 VOTE_DAILY_LIMIT = int(os.getenv('VOTE_DAILY_LIMIT', '50'))

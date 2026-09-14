@@ -1,7 +1,0 @@
-[functions.scoring-engine]
-verify_jwt = true
-entrypoint = "./functions/scoring-engine/index.ts"
-
-[functions.vote]
-verify_jwt = true
-entrypoint = "./functions/vote/index.ts"

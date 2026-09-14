@@ -1,6 +1,6 @@
 # Challenge Platform API
 
-This Django REST API is the policy boundary for challenge data, submissions, votes, reports, and leaderboard scoring. It uses Supabase Postgres through Django's `DATABASE_URL`, validates Supabase JWTs with `SUPABASE_JWT_SECRET`, and leaves Supabase Auth and Storage as the identity and file-upload providers.
+This Django REST API is the policy boundary for challenge data, submissions, votes, reports, and leaderboard scoring. It uses the database configured by Django's `DATABASE_URL` and local browser sessions for development authentication.
 
 ## Local setup
 

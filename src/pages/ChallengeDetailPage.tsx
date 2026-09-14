@@ -20,7 +20,7 @@ interface ChallengeDetailPageProps {
 }
 
 export function ChallengeDetailPage({ challengeId, onNavigate }: ChallengeDetailPageProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [loading, setLoading] = useState(true);
   const [participantStatus, setParticipantStatus] = useState<string | null>(null);
@@ -574,21 +574,7 @@ function SubmitForm({ challenge, onClose, onSubmitted }: SubmitFormProps) {
     setUploading(true);
     setError(null);
     try {
-      const { data: session } = await (await import('@/lib/supabase')).supabase.auth.getSession();
-      const userId = session.session?.user?.id;
-      if (!userId) throw new Error('Not authenticated');
-
-      const ext = file.name.split('.').pop();
-      const path = `${userId}/${challenge.id}/${Date.now()}.${ext}`;
-      const { data, error: uploadError } = await (await import('@/lib/supabase')).supabase.storage
-        .from('submissions')
-        .upload(path, file);
-      if (uploadError) throw new Error(uploadError.message);
-
-      const { data: urlData } = (await import('@/lib/supabase')).supabase.storage
-        .from('submissions')
-        .getPublicUrl(data.path);
-      setFileUrl(urlData.publicUrl);
+      setFileUrl(URL.createObjectURL(file));
 
       const buf = await file.arrayBuffer();
       const hashBuffer = await crypto.subtle.digest('SHA-256', buf);

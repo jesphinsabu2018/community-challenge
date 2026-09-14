@@ -1,13 +1,12 @@
-import { supabase } from './supabase';
 import type { Challenge, ChallengeLeaderboardEntry, Comment, LeaderboardEntry, Profile, Report, ScoreBreakdown, Submission, Vote } from '@/types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000/api';
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
-  if (session?.access_token) headers.set('Authorization', `Bearer ${session.access_token}`);
+  const savedUser = localStorage.getItem('fairplay_user');
+  if (savedUser) headers.set('X-User-ID', (JSON.parse(savedUser) as { id: string }).id);
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: `Request failed (${response.status})` }));
@@ -32,8 +31,8 @@ export async function castVote(submissionId: string) { await apiRequest(`/submis
 export async function removeVote(submissionId: string) { await apiRequest(`/submissions/${submissionId}/vote/`, { method: 'DELETE' }); }
 export async function getVotesForSubmission(submissionId: string): Promise<Vote[]> { return apiRequest<Vote[]>(`/submissions/${submissionId}/votes/`); }
 export async function hasVoted(submissionId: string) {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session ? (await getVotesForSubmission(submissionId)).some((vote) => vote.voter_id === session.user.id) : false;
+  const savedUser = localStorage.getItem('fairplay_user');
+  return savedUser ? (await getVotesForSubmission(submissionId)).some((vote) => vote.voter_id === (JSON.parse(savedUser) as { id: string }).id) : false;
 }
 export async function getVoteCount(submissionId: string) { return (await getVotesForSubmission(submissionId)).length; }
 export function fetchComments(submissionId: string): Promise<(Comment & { username: string; avatar_url: string | null })[]> { return apiRequest(`/submissions/${submissionId}/comments/`); }
