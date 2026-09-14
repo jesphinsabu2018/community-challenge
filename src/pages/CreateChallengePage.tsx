@@ -43,6 +43,7 @@ export function CreateChallengePage({ onNavigate }: CreateChallengePageProps) {
   const [rules, setRules] = useState('');
   const [category, setCategory] = useState<ChallengeCategory>('Fitness');
   const [difficulty, setDifficulty] = useState<DifficultyTier>('Medium');
+  const [points, setPoints] = useState('300');
   const [submissionType, setSubmissionType] = useState<SubmissionType>('numeric');
   const [deadline, setDeadline] = useState('');
   const [requiresVerification, setRequiresVerification] = useState(true);
@@ -85,6 +86,7 @@ export function CreateChallengePage({ onNavigate }: CreateChallengePageProps) {
         category,
         difficulty_tier: difficulty,
         difficulty_weight: DIFFICULTY_WEIGHTS[difficulty],
+        points: Math.max(1, parseInt(points, 10) || 1),
         submission_type: submissionType,
         evaluation_criteria: evaluationCriteria,
         benchmark_value: benchmarkValue ? parseFloat(benchmarkValue) : null,
@@ -257,6 +259,19 @@ export function CreateChallengePage({ onNavigate }: CreateChallengePageProps) {
               <p className="text-xs text-emerald-700">
                 Evaluation criteria helps the scoring engine compute fair scores. Fill in what applies to your challenge type.
               </p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-600 mb-1.5 block">Challenge Points</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={points}
+                onChange={(e) => setPoints(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-emerald-400"
+              />
+              <p className="text-xs text-slate-400 mt-1">Awarded to participants based on this challenge's difficulty.</p>
             </div>
 
             {submissionType === 'numeric' && (
