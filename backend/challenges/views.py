@@ -218,3 +218,42 @@ class AdminDashboardView(APIView):
                 'event_type', 'actor_id', 'created_at', 'metadata'
             )[:25]),
         })
+
+
+class AdminParticipationView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        participants = list(Participation.objects.select_related('challenge').order_by('challenge__title', '-joined_at'))
+        user_ids = {participant.user_id for participant in participants}
+        profiles = {
+            profile.id: profile
+            for profile in Profile.objects.filter(id__in=user_ids)
+        }
+        submission_scores = {
+            submission.participation_id: submission.merit_score
+            for submission in Submission.objects.filter(participation_id__in=[item.id for item in participants]).order_by('-submitted_at')
+        }
+        grouped = {}
+        for participant in participants:
+            grouped.setdefault(str(participant.challenge_id), {
+                'challenge_id': str(participant.challenge_id),
+                'title': participant.challenge.title,
+                'points': participant.challenge.points,
+                'difficulty': participant.challenge.difficulty,
+                'participant_count': 0,
+                'participants': [],
+            })
+            profile = profiles.get(participant.user_id)
+            grouped[str(participant.challenge_id)]['participant_count'] += 1
+            grouped[str(participant.challenge_id)]['participants'].append({
+                'user_id': str(participant.user_id),
+                'username': profile.username if profile else f'user_{str(participant.user_id)[:8]}',
+                'avatar_url': profile.avatar_url if profile else None,
+                'bio': profile.bio if profile else '',
+                'status': participant.status,
+                'joined_at': participant.joined_at,
+                'submitted': participant.id in submission_scores,
+                'merit_score': float(submission_scores[participant.id]) if submission_scores.get(participant.id) is not None else None,
+            })
+        return Response(list(grouped.values()))

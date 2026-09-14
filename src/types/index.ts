@@ -28,6 +28,7 @@ export interface Challenge {
   category: ChallengeCategory;
   difficulty_tier: DifficultyTier;
   difficulty_weight: number;
+  points: number;
   submission_type: SubmissionType;
   evaluation_criteria: Record<string, unknown>;
   benchmark_value: number | null;

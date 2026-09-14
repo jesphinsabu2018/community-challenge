@@ -121,7 +121,7 @@ export function ChallengeDetailPage({ challengeId, onNavigate }: ChallengeDetail
                 {challenge.category}
               </span>
               <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-                {challenge.difficulty_tier} ({challenge.difficulty_weight}x)
+                {challenge.difficulty_tier} ({challenge.difficulty_weight}x) · {challenge.points} points
               </span>
               {challenge.requires_verification && (
                 <span className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200">

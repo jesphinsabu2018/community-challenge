@@ -10,6 +10,7 @@ class ChallengeSerializer(serializers.ModelSerializer):
     evaluation_criteria = serializers.JSONField(write_only=True, required=False)
     rules = serializers.CharField(write_only=True, required=False, allow_blank=True)
     difficulty_weight = serializers.FloatField(write_only=True, required=False)
+    points = serializers.IntegerField(required=False, min_value=1)
     benchmark_value = serializers.FloatField(write_only=True, required=False, allow_null=True)
     benchmark_unit = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
     requires_verification = serializers.BooleanField(write_only=True, required=False)

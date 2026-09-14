@@ -58,6 +58,7 @@ export function ChallengeCard({ challenge, onClick }: ChallengeCardProps) {
 
         <div className="flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-3">
+            <span className="font-semibold text-emerald-700">{challenge.points} points</span>
             <span className="flex items-center gap-1">
               <Users className="w-3.5 h-3.5" />
               {challenge.participant_count}
