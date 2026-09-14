@@ -16,6 +16,7 @@ class LocalUser:
 
     def __init__(self, user_id):
         self.id = user_id
+        self.pk = user_id
 
     def __str__(self):
         return self.id
