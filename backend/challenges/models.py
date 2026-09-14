@@ -23,21 +23,20 @@ class Profile(models.Model):
 
 
 class Challenge(models.Model):
+    class ScoringMethod(models.TextChoices):
+        PEER_REVIEW = 'peer_review', 'Peer review'
+        NUMERIC_THRESHOLD = 'numeric_threshold', 'Numeric threshold'
+        HYBRID = 'hybrid', 'Hybrid'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     creator_id = models.UUIDField()
     title = models.CharField(max_length=180)
     description = models.TextField(blank=True)
-    rules = models.TextField(blank=True)
-    category = models.CharField(max_length=30)
-    difficulty_tier = models.CharField(max_length=20)
-    difficulty_weight = models.DecimalField(max_digits=3, decimal_places=2, default=1, validators=[MinValueValidator(1), MaxValueValidator(2)])
-    submission_type = models.CharField(max_length=20)
-    evaluation_criteria = models.JSONField(default=dict)
-    benchmark_value = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
-    benchmark_unit = models.CharField(max_length=40, blank=True, null=True)
+    category = models.CharField(max_length=30, blank=True)
+    difficulty = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
     deadline = models.DateTimeField(null=True, blank=True)
-    requires_verification = models.BooleanField(default=True)
-    participant_count = models.PositiveIntegerField(default=0)
+    submission_schema = models.JSONField(default=dict)
+    scoring_method = models.CharField(max_length=30, choices=ScoringMethod.choices)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -45,38 +44,53 @@ class Challenge(models.Model):
         ordering = ['-created_at']
 
 
-class Participant(models.Model):
+class Participation(models.Model):
+    class Status(models.TextChoices):
+        JOINED = 'joined', 'Joined'
+        IN_PROGRESS = 'in_progress', 'In progress'
+        COMPLETED = 'completed', 'Completed'
+        FAILED = 'failed', 'Failed'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField()
-    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, db_column='challenge_id', related_name='participants')
-    status = models.CharField(max_length=20, default='joined')
+    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, related_name='participations')
     joined_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.JOINED)
 
     class Meta:
-        db_table = 'participants'
-        constraints = [models.UniqueConstraint(fields=['user_id', 'challenge'], name='participants_user_challenge_unique')]
+        db_table = 'participations'
+        constraints = [models.UniqueConstraint(fields=['user_id', 'challenge'], name='participations_user_challenge_unique')]
 
 
 class Submission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user_id = models.UUIDField()
-    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, db_column='challenge_id', related_name='submissions')
-    submission_payload = models.JSONField(default=dict)
-    file_url = models.URLField(blank=True, null=True)
-    file_hash = models.CharField(max_length=128, blank=True, null=True, db_index=True)
-    raw_performance_score = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
-    verification_status = models.CharField(max_length=20, default='pending')
+    participation = models.ForeignKey(Participation, on_delete=models.CASCADE, related_name='submissions')
+    payload = models.JSONField(default=dict)
     submitted_at = models.DateTimeField(auto_now_add=True)
+    merit_score = models.DecimalField(max_digits=9, decimal_places=3, null=True, blank=True)
 
     class Meta:
         db_table = 'submissions'
-        constraints = [models.UniqueConstraint(fields=['user_id', 'challenge'], name='submissions_user_challenge_unique')]
+        constraints = [models.UniqueConstraint(fields=['participation'], name='one_submission_per_participation')]
+
+
+class PeerReview(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reviewer_id = models.UUIDField()
+    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name='peer_reviews')
+    score = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    reviewer_trust_weight = models.DecimalField(max_digits=6, decimal_places=3, default=1, validators=[MinValueValidator(0)])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'peer_reviews'
+        constraints = [models.UniqueConstraint(fields=['reviewer_id', 'submission'], name='peer_reviews_reviewer_submission_unique')]
 
 
 class Vote(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     voter_id = models.UUIDField()
-    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, db_column='submission_id', related_name='votes')
+    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name='votes')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -84,40 +98,60 @@ class Vote(models.Model):
         constraints = [models.UniqueConstraint(fields=['voter_id', 'submission'], name='votes_voter_submission_unique')]
 
 
-class Report(models.Model):
+class ReviewAssignment(models.Model):
+    class Status(models.TextChoices):
+        ASSIGNED = 'assigned', 'Assigned'
+        COMPLETED = 'completed', 'Completed'
+        EXPIRED = 'expired', 'Expired'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    reporter_id = models.UUIDField()
-    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, db_column='submission_id', related_name='reports')
-    reason = models.TextField(blank=True)
-    status = models.CharField(max_length=20, default='pending')
+    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name='review_assignments')
+    reviewer_id = models.UUIDField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ASSIGNED)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'review_assignments'
+        constraints = [models.UniqueConstraint(fields=['submission', 'reviewer_id'], name='review_assignments_submission_reviewer_unique')]
+
+
+class AuditEvent(models.Model):
+    event_type = models.CharField(max_length=40)
+    actor_id = models.UUIDField(null=True, blank=True)
+    submission = models.ForeignKey(Submission, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_events')
+    ip_hash = models.CharField(max_length=64, blank=True)
+    device_fingerprint = models.CharField(max_length=64, blank=True)
+    metadata = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'reports'
-        constraints = [models.UniqueConstraint(fields=['reporter_id', 'submission'], name='reports_reporter_submission_unique')]
+        db_table = 'audit_events'
+        indexes = [models.Index(fields=['event_type', 'created_at'])]
 
 
-class Comment(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user_id = models.UUIDField()
-    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, db_column='submission_id', related_name='comments')
-    text = models.TextField()
+class AnomalyFlag(models.Model):
+    class Status(models.TextChoices):
+        OPEN = 'open', 'Open'
+        REVIEWED = 'reviewed', 'Reviewed'
+        DISMISSED = 'dismissed', 'Dismissed'
+
+    kind = models.CharField(max_length=60)
+    subject_id = models.UUIDField(null=True, blank=True)
+    submission = models.ForeignKey(Submission, on_delete=models.SET_NULL, null=True, blank=True, related_name='anomaly_flags')
+    severity = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(5)])
+    evidence = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'comments'
+        db_table = 'anomaly_flags'
+        indexes = [models.Index(fields=['status', 'created_at'])]
 
 
 class ScoreAuditLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    submission = models.ForeignKey(Submission, on_delete=models.PROTECT, db_column='submission_id', related_name='score_audits')
+    submission = models.ForeignKey(Submission, on_delete=models.PROTECT, related_name='score_audits')
     computed_final_score = models.DecimalField(max_digits=9, decimal_places=3)
-    performance_normalized = models.DecimalField(max_digits=6, decimal_places=3)
-    difficulty_weight = models.DecimalField(max_digits=4, decimal_places=3)
-    completion_factor = models.DecimalField(max_digits=5, decimal_places=3)
-    verification_factor = models.DecimalField(max_digits=5, decimal_places=3)
-    consistency_bonus = models.DecimalField(max_digits=6, decimal_places=3)
-    community_signal_capped = models.DecimalField(max_digits=6, decimal_places=3)
     breakdown = models.JSONField(default=dict)
     computed_at = models.DateTimeField(auto_now_add=True)
 

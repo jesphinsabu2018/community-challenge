@@ -1,24 +1,20 @@
-from django.urls import path
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
-from .views import ChallengeDetailView, ChallengeListView, CommentView, JoinChallengeView, LeaderboardView, ModerationReportStatusView, ModerationReportsView, ModerationVerificationView, MySubmissionListView, ParticipantStatusView, ProfileByUsernameView, ProfileView, ReportView, ScoreBreakdownView, SubmissionListView, VoteListView, VoteView
+from .views import AdminDashboardView, AdminLoginView, ChallengeLeaderboardView, ChallengeViewSet, ParticipationViewSet, PeerReviewViewSet, ProfileView, ReviewAssignmentViewSet, SubmissionViewSet, VoteViewSet
+
+router = DefaultRouter()
+router.register('challenges', ChallengeViewSet, basename='challenge')
+router.register('participations', ParticipationViewSet, basename='participation')
+router.register('submissions', SubmissionViewSet, basename='submission')
+router.register('peer-reviews', PeerReviewViewSet, basename='peer-review')
+router.register('review-assignments', ReviewAssignmentViewSet, basename='review-assignment')
+router.register('votes', VoteViewSet, basename='vote')
 
 urlpatterns = [
-    path('challenges/', ChallengeListView.as_view()),
-    path('challenges/<uuid:challenge_id>/', ChallengeDetailView.as_view()),
-    path('challenges/<uuid:challenge_id>/join/', JoinChallengeView.as_view()),
-    path('challenges/<uuid:challenge_id>/participant-status/', ParticipantStatusView.as_view()),
-    path('challenges/<uuid:challenge_id>/submit/', SubmissionListView.as_view()),
-    path('submissions/mine/', MySubmissionListView.as_view()),
-    path('submissions/<uuid:submission_id>/vote/', VoteView.as_view()),
-    path('submissions/<uuid:submission_id>/votes/', VoteListView.as_view()),
-    path('submissions/<uuid:submission_id>/report/', ReportView.as_view()),
-    path('submissions/<uuid:submission_id>/verification/', ModerationVerificationView.as_view()),
-    path('submissions/<uuid:submission_id>/comments/', CommentView.as_view()),
-    path('moderation/reports/', ModerationReportsView.as_view()),
-    path('moderation/reports/<uuid:report_id>/', ModerationReportStatusView.as_view()),
-    path('leaderboard/global/', LeaderboardView.as_view()),
-    path('leaderboard/<uuid:challenge_id>/', LeaderboardView.as_view()),
-    path('submissions/<uuid:submission_id>/score/', ScoreBreakdownView.as_view()),
-    path('users/<uuid:user_id>/stats/', ProfileView.as_view()),
-    path('users/by-username/<str:username>/stats/', ProfileByUsernameView.as_view()),
+    path('admin/login/', AdminLoginView.as_view(), name='admin-login'),
+    path('admin/dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
+    path('', include(router.urls)),
+    path('leaderboard/<uuid:challenge_id>/', ChallengeLeaderboardView.as_view(), name='challenge-leaderboard'),
+    path('users/<uuid:user_id>/stats/', ProfileView.as_view(), name='profile'),
 ]

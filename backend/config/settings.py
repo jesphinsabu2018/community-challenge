@@ -3,6 +3,7 @@ from pathlib import Path
 
 import dj_database_url
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
@@ -25,11 +26,29 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',') if origin.strip()]
+CORS_ALLOW_HEADERS = (*default_headers, 'x-user-id', 'x-admin-token')
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ['challenges.authentication.LocalUserAuthentication'],
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'challenges.admin_auth.AdminTokenAuthentication',
+        'challenges.authentication.LocalUserAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.AnonRateThrottle', 'rest_framework.throttling.UserRateThrottle'],
-    'DEFAULT_THROTTLE_RATES': {'anon': '30/minute', 'user': '120/minute', 'vote': '50/day', 'submission': '10/hour'},
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '30/minute', 'user': '120/minute', 'vote': '50/day',
+        'submission': '5/hour', 'peer_review': '20/hour', 'user_ip': '120/hour',
+    },
+}
+AUDIT_HASH_SALT = os.getenv('AUDIT_HASH_SALT', SECRET_KEY)
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', '')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
+ADMIN_TOKEN_MAX_AGE = int(os.getenv('ADMIN_TOKEN_MAX_AGE', '28800'))
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+CELERY_BEAT_SCHEDULE = {
+    'detect-anomalies-every-five-minutes': {
+        'task': 'challenges.tasks.detect_anomalies',
+        'schedule': 300,
+    },
 }
 SCORE_COMMUNITY_CAP = float(os.getenv('SCORE_COMMUNITY_CAP', '10'))
 SCORE_CONSISTENCY_BONUS_CAP = float(os.getenv('SCORE_CONSISTENCY_BONUS_CAP', '8'))

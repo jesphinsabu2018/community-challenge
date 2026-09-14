@@ -33,7 +33,7 @@ const submissionTypes: { value: SubmissionType; label: string; description: stri
 ];
 
 export function CreateChallengePage({ onNavigate }: CreateChallengePageProps) {
-  const { user } = useAuth();
+  const { user, adminUsername } = useAuth();
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export function CreateChallengePage({ onNavigate }: CreateChallengePageProps) {
   const [answerKey, setAnswerKey] = useState('');
   const [checklistItems, setChecklistItems] = useState('');
 
-  if (!user) {
+  if (!user && !adminUsername) {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
         <p className="text-slate-500 mb-4">Sign in to create a challenge.</p>

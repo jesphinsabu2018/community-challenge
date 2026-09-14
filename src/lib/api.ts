@@ -7,6 +7,8 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
   headers.set('Content-Type', 'application/json');
   const savedUser = localStorage.getItem('fairplay_user');
   if (savedUser) headers.set('X-User-ID', (JSON.parse(savedUser) as { id: string }).id);
+  const adminToken = localStorage.getItem('fairplay_admin_token');
+  if (adminToken) headers.set('X-Admin-Token', adminToken);
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: `Request failed (${response.status})` }));

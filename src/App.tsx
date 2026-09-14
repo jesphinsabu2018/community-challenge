@@ -9,23 +9,43 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { LeaderboardPage } from '@/pages/LeaderboardPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { ModerationPage } from '@/pages/ModerationPage';
+import { AdminLoginPage } from '@/pages/AdminLoginPage';
+import { AdminPage } from '@/pages/AdminPage';
 
 function AppContent() {
-  const { user, loading } = useAuth();
-  const [page, setPage] = useState('home');
+  const { user, adminUsername, loading } = useAuth();
+  const [page, setPage] = useState(() => {
+    if (window.location.pathname === '/admin' || window.location.pathname === '/admin-login') return 'admin';
+    return 'home';
+  });
   const [params, setParams] = useState<Record<string, string>>({});
+  const isAdminPath = window.location.pathname === '/admin' || window.location.pathname === '/admin-login';
 
   const navigate = (newPage: string, newParams: Record<string, string> = {}) => {
     setPage(newPage);
     setParams(newParams);
+    const path = newPage === 'home' ? '/' : newPage === 'admin-login' ? '/admin' : `/${newPage}`;
+    window.history.pushState({}, '', path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   useEffect(() => {
-    if (!loading && !user && page !== 'auth' && page !== 'home') {
+    if (!loading && isAdminPath) {
+      if (!adminUsername && page !== 'admin-login') navigate('admin-login');
+      return;
+    }
+    if (!loading && page === 'admin' && !adminUsername) {
+      navigate('admin-login');
+      return;
+    }
+    if (!loading && page === 'create' && !adminUsername) {
+      navigate('home');
+      return;
+    }
+    if (!loading && !user && !adminUsername && page !== 'auth' && page !== 'home' && !isAdminPath) {
       navigate('auth');
     }
-  }, [user, loading, page]);
+  }, [user, adminUsername, loading, page, isAdminPath]);
 
   if (loading) {
     return (
@@ -35,7 +55,7 @@ function AppContent() {
     );
   }
 
-  if (!user && page !== 'home' && page !== 'auth') {
+  if (!user && !adminUsername && page !== 'home' && page !== 'auth' && page !== 'admin' && page !== 'admin-login' && !isAdminPath) {
     navigate('auth');
   }
 
@@ -43,14 +63,16 @@ function AppContent() {
     <div className="min-h-screen bg-slate-50">
       <Navbar currentPage={page} onNavigate={navigate} />
       <main>
-        {page === 'auth' && <AuthPage />}
-        {page === 'home' && <HomePage onNavigate={navigate} />}
+        {page === 'auth' && !isAdminPath && <AuthPage />}
+        {(page === 'home' || (page === 'create' && !adminUsername)) && <HomePage onNavigate={navigate} />}
         {page === 'challenge' && params.id && <ChallengeDetailPage challengeId={params.id} onNavigate={navigate} />}
-        {page === 'create' && <CreateChallengePage onNavigate={navigate} />}
+        {page === 'create' && adminUsername && <CreateChallengePage onNavigate={navigate} />}
         {page === 'dashboard' && <DashboardPage onNavigate={navigate} />}
         {page === 'leaderboard' && <LeaderboardPage onNavigate={navigate} />}
         {page === 'profile' && <ProfilePage onNavigate={navigate} />}
         {page === 'moderation' && <ModerationPage onNavigate={navigate} />}
+        {(isAdminPath || page === 'admin-login' || (page === 'admin' && !adminUsername)) && !adminUsername && <AdminLoginPage onNavigate={navigate} />}
+        {page === 'admin' && adminUsername && <AdminPage onNavigate={navigate} />}
       </main>
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-400">
         FairPlay — Fair competition, ranked by merit not popularity

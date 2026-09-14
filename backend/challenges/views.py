@@ -1,284 +1,220 @@
-from datetime import timedelta
-
-from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F
-from django.utils import timezone
-from rest_framework import status, throttling
-from rest_framework.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
+from rest_framework import permissions, serializers, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Challenge, Comment, Participant, Profile, Report, ScoreAuditLog, Submission, Vote
-from .scoring_engine import calculate_score
+from .admin_auth import IsAdmin, authenticate_admin
+from .models import AuditEvent, Challenge, Participation, PeerReview, Profile, ReviewAssignment, Submission, Vote
+from .serializers import BlindReviewSerializer, ChallengeSerializer, ParticipationSerializer, PeerReviewSerializer, ProfileSerializer, SubmissionSerializer, VoteSerializer
+from .security import PeerReviewThrottle, ReviewAssignmentPermission, SubmissionThrottle, VoteThrottle, ensure_review_assignment, hash_ip, device_fingerprint, stratified_assign, suspicious_review_pair
+from .services import compute_merit_score, reviewer_trust_weight
 
 
-class SubmissionThrottle(throttling.UserRateThrottle):
-    scope = 'submission'
+class IsAuthenticatedOrReadOnly(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.method in permissions.SAFE_METHODS or bool(request.user and request.user.is_authenticated)
 
 
-class VoteThrottle(throttling.UserRateThrottle):
-    scope = 'vote'
+class ChallengeViewSet(viewsets.ModelViewSet):
+    queryset = Challenge.objects.all()
+    serializer_class = ChallengeSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAdmin()]
+        return super().get_permissions()
 
-def profile_data(profile):
-    return {
-        'id': str(profile.id), 'username': profile.username, 'avatar_url': profile.avatar_url, 'bio': profile.bio,
-        'is_moderator': profile.is_moderator, 'challenges_joined': profile.challenges_joined,
-        'challenges_completed': profile.challenges_completed, 'challenges_in_progress': profile.challenges_in_progress,
-        'challenges_failed': profile.challenges_failed, 'average_score': float(profile.average_score),
-        'consistency_streak': profile.consistency_streak, 'created_at': profile.created_at,
-    }
+    def perform_create(self, serializer):
+        serializer.save(creator_id=self.request.user.id)
 
-
-def challenge_data(challenge):
-    return {field: getattr(challenge, field) for field in (
-        'id', 'creator_id', 'title', 'description', 'rules', 'category', 'difficulty_tier', 'difficulty_weight',
-        'submission_type', 'evaluation_criteria', 'benchmark_value', 'benchmark_unit', 'deadline',
-        'requires_verification', 'participant_count', 'created_at')}
-
-
-def submission_data(submission):
-    return {
-        'id': str(submission.id), 'user_id': str(submission.user_id), 'challenge_id': str(submission.challenge_id),
-        'submission_payload': submission.submission_payload, 'file_url': submission.file_url, 'file_hash': submission.file_hash,
-        'raw_performance_score': submission.raw_performance_score, 'verification_status': submission.verification_status,
-        'submitted_at': submission.submitted_at, 'vote_count': submission.votes.count(),
-    }
-
-
-def ensure_profile(user_id, claims=None):
-    profile, _ = Profile.objects.get_or_create(
-        id=user_id,
-        defaults={'username': (claims or {}).get('user_metadata', {}).get('username', f'user_{str(user_id)[:8]}')},
-    )
-    return profile
-
-
-def recompute_submission(submission):
-    profile = ensure_profile(submission.user_id)
-    result = calculate_score(
-        challenge=submission.challenge,
-        submission=submission,
-        consistency_streak=profile.consistency_streak,
-        vote_count=submission.votes.count(),
-        cohort_size=submission.challenge.submissions.count(),
-    )
-    details = result.breakdown
-    ScoreAuditLog.objects.create(
-        submission=submission, computed_final_score=result.final_score,
-        performance_normalized=details['performance_normalized'], difficulty_weight=details['difficulty_weight'],
-        completion_factor=details['completion_factor'], verification_factor=details['verification_factor'],
-        consistency_bonus=details['consistency_bonus'], community_signal_capped=details['community_signal_capped'],
-        breakdown=details,
-    )
-    return result
-
-
-class ChallengeListView(APIView):
-    def get(self, request):
-        section = request.query_params.get('section', 'active')
-        challenges = Challenge.objects.all()
-        if section == 'new':
-            challenges = challenges.order_by('-created_at')
-        elif section in {'active', 'popular'}:
-            challenges = challenges.order_by('-participant_count', '-created_at')
-        return Response([challenge_data(item) for item in challenges[:50]])
-
-    def post(self, request):
-        payload = request.data
-        required = ('title', 'category', 'difficulty_tier', 'submission_type')
-        if any(not payload.get(field) for field in required):
-            raise ValidationError('title, category, difficulty_tier, and submission_type are required.')
-        challenge = Challenge.objects.create(
-            creator_id=request.user.id, title=payload['title'], description=payload.get('description', ''),
-            rules=payload.get('rules', ''), category=payload['category'], difficulty_tier=payload['difficulty_tier'],
-            difficulty_weight=payload.get('difficulty_weight', {'Easy': 1, 'Medium': 1.3, 'Hard': 1.6, 'Expert': 2}.get(payload['difficulty_tier'], 1)),
-            submission_type=payload['submission_type'], evaluation_criteria=payload.get('evaluation_criteria', {}),
-            benchmark_value=payload.get('benchmark_value'), benchmark_unit=payload.get('benchmark_unit'),
-            deadline=payload.get('deadline'), requires_verification=payload.get('requires_verification', True),
-        )
-        return Response(challenge_data(challenge), status=status.HTTP_201_CREATED)
-
-
-class ChallengeDetailView(APIView):
-    def get_object(self, challenge_id):
-        try:
-            return Challenge.objects.get(id=challenge_id)
-        except Challenge.DoesNotExist:
-            raise ValidationError('Challenge not found.')
-
-    def get(self, request, challenge_id):
-        return Response(challenge_data(self.get_object(challenge_id)))
-
-
-class JoinChallengeView(APIView):
-    def post(self, request, challenge_id):
-        challenge = Challenge.objects.get(id=challenge_id)
-        participant, created = Participant.objects.get_or_create(user_id=request.user.id, challenge=challenge)
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def join(self, request, pk=None):
+        challenge = self.get_object()
+        participation, created = Participation.objects.get_or_create(user_id=request.user.id, challenge=challenge)
         if not created:
-            return Response({'detail': 'Already joined.'}, status=status.HTTP_409_CONFLICT)
-        Profile.objects.filter(id=request.user.id).update(challenges_joined=F('challenges_joined') + 1)
-        return Response({'status': participant.status}, status=status.HTTP_201_CREATED)
+            return Response(ParticipationSerializer(participation).data, status=status.HTTP_200_OK)
+        return Response(ParticipationSerializer(participation).data, status=status.HTTP_201_CREATED)
 
-
-class ParticipantStatusView(APIView):
-    def get(self, request, challenge_id):
-        participant = Participant.objects.filter(user_id=request.user.id, challenge_id=challenge_id).first()
-        return Response({'status': participant.status if participant else None})
-
-
-class SubmissionListView(APIView):
-    throttle_classes = [SubmissionThrottle]
-
-    def get(self, request, challenge_id):
-        return Response([submission_data(item) for item in Submission.objects.filter(challenge_id=challenge_id).order_by('-submitted_at')])
-
-    def post(self, request, challenge_id):
-        challenge = Challenge.objects.get(id=challenge_id)
-        if not Participant.objects.filter(user_id=request.user.id, challenge=challenge).exists():
-            raise ValidationError('Join the challenge before submitting proof.')
-        payload = request.data.get('submission_payload', {})
-        file_hash = request.data.get('file_hash')
-        if file_hash and Submission.objects.filter(file_hash=file_hash).exclude(user_id=request.user.id, challenge=challenge).exists():
-            raise ValidationError('This proof matches an existing submission and has been blocked as a duplicate.')
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='submit')
+    def submit(self, request, pk=None):
+        challenge = self.get_object()
+        participation = get_object_or_404(Participation, challenge=challenge, user_id=request.user.id)
+        serializer = SubmissionSerializer(data={
+            'participation': participation.pk,
+            'payload': request.data.get('payload', {}),
+        })
+        serializer.is_valid(raise_exception=True)
         try:
             with transaction.atomic():
-                submission = Submission.objects.create(user_id=request.user.id, challenge=challenge, submission_payload=payload, file_url=request.data.get('file_url'), file_hash=file_hash)
-                Participant.objects.filter(user_id=request.user.id, challenge=challenge).update(status='completed')
-                recompute_submission(submission)
+                submission = serializer.save()
+                participation.status = Participation.Status.COMPLETED
+                participation.save(update_fields=['status'])
+                compute_merit_score(submission)
+                AuditEvent.objects.create(
+                    event_type='submission_created', actor_id=request.user.id, submission=submission,
+                    ip_hash=hash_ip(request), device_fingerprint=device_fingerprint(request),
+                    metadata={'challenge_id': str(challenge.id)},
+                )
+                reviewer_ids = Participation.objects.filter(challenge=challenge).exclude(
+                    user_id=request.user.id
+                ).values_list('user_id', flat=True)
+                stratified_assign(submission, reviewer_ids)
         except IntegrityError as error:
-            raise ValidationError('You already have a submission for this challenge.') from error
-        return Response(submission_data(submission), status=status.HTTP_201_CREATED)
+            raise serializers.ValidationError('This participation already has a submission.') from error
+        return Response(SubmissionSerializer(submission).data, status=status.HTTP_201_CREATED)
+
+    def get_throttles(self):
+        return [SubmissionThrottle()] if self.action == 'submit' else super().get_throttles()
 
 
-class MySubmissionListView(APIView):
-    def get(self, request):
-        return Response([submission_data(item) for item in Submission.objects.filter(user_id=request.user.id).order_by('-submitted_at')])
+class ParticipationViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ParticipationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Participation.objects.filter(user_id=self.request.user.id).select_related('challenge')
 
 
-class VoteView(APIView):
-    throttle_classes = [VoteThrottle]
+class SubmissionViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = SubmissionSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    queryset = Submission.objects.select_related('participation', 'participation__challenge').all()
 
-    def post(self, request, submission_id):
+
+class PeerReviewViewSet(viewsets.ModelViewSet):
+    serializer_class = PeerReviewSerializer
+    permission_classes = [permissions.IsAuthenticated, ReviewAssignmentPermission]
+    queryset = PeerReview.objects.select_related('submission', 'submission__participation').all()
+
+    def get_throttles(self):
+        return [PeerReviewThrottle()] if self.action == 'create' else super().get_throttles()
+
+    def get_queryset(self):
+        return super().get_queryset().filter(reviewer_id=self.request.user.id)
+
+    def perform_create(self, serializer):
+        submission = serializer.validated_data['submission']
+        assignment = ensure_review_assignment(submission, self.request.user.id)
+        if suspicious_review_pair(self.request.user.id, submission.participation.user_id):
+            from .models import AnomalyFlag
+            AnomalyFlag.objects.get_or_create(
+                kind='mutual_review_pattern', subject_id=self.request.user.id,
+                defaults={'submission': submission, 'severity': 3, 'evidence': {'author_id': str(submission.participation.user_id)}},
+            )
+        weight = reviewer_trust_weight(self.request.user.id)
+        review = serializer.save(reviewer_id=self.request.user.id, reviewer_trust_weight=weight)
+        assignment.status = ReviewAssignment.Status.COMPLETED
+        assignment.save(update_fields=['status'])
+        AuditEvent.objects.create(
+            event_type='peer_review_created', actor_id=self.request.user.id, submission=submission,
+            ip_hash=hash_ip(self.request), device_fingerprint=device_fingerprint(self.request),
+            metadata={'assignment_id': str(assignment.id), 'blind': True},
+        )
+        compute_merit_score(review.submission)
+
+
+class ReviewAssignmentViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = BlindReviewSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Submission.objects.filter(
+            review_assignments__reviewer_id=self.request.user.id,
+            review_assignments__status=ReviewAssignment.Status.ASSIGNED,
+        ).distinct()
+
+
+class VoteViewSet(viewsets.ModelViewSet):
+    serializer_class = VoteSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = Vote.objects.all()
+
+    def get_throttles(self):
+        return [VoteThrottle()] if self.action == 'create' else super().get_throttles()
+
+    def perform_create(self, serializer):
+        submission = serializer.validated_data['submission']
+        if submission.participation.user_id == self.request.user.id:
+            raise serializers.ValidationError({'submission': 'You cannot vote for your own submission.'})
         try:
-            submission = Submission.objects.select_related('challenge').get(id=submission_id)
-        except Submission.DoesNotExist:
-            raise ValidationError('Submission not found.')
-        if submission.user_id == request.user.id:
-            raise ValidationError('Self-voting is not allowed.')
-        since = timezone.now() - timedelta(days=1)
-        if Vote.objects.filter(voter_id=request.user.id, created_at__gte=since).count() >= settings.VOTE_DAILY_LIMIT:
-            raise ValidationError('Daily vote limit reached.')
-        if Vote.objects.filter(voter_id=request.user.id, submission__challenge=submission.challenge, created_at__gte=since).count() >= settings.VOTE_CHALLENGE_LIMIT:
-            raise ValidationError('Challenge vote limit reached.')
-        try:
-            Vote.objects.create(voter_id=request.user.id, submission=submission)
+            vote = serializer.save(voter_id=self.request.user.id)
         except IntegrityError as error:
-            raise ValidationError('You have already voted for this submission.') from error
-        recompute_submission(submission)
-        return Response({'vote_count': submission.votes.count()}, status=status.HTTP_201_CREATED)
-
-    def delete(self, request, submission_id):
-        Vote.objects.filter(voter_id=request.user.id, submission_id=submission_id).delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class VoteListView(APIView):
-    def get(self, request, submission_id):
-        return Response([{'id': str(vote.id), 'voter_id': str(vote.voter_id), 'submission_id': str(vote.submission_id), 'created_at': vote.created_at} for vote in Vote.objects.filter(submission_id=submission_id)])
+            raise serializers.ValidationError({'submission': 'You have already voted for this submission.'}) from error
+        AuditEvent.objects.create(
+            event_type='vote_created', actor_id=self.request.user.id, submission=submission,
+            ip_hash=hash_ip(self.request), device_fingerprint=device_fingerprint(self.request),
+            metadata={'vote_id': str(vote.id)},
+        )
 
 
-class ReportView(APIView):
-    def post(self, request, submission_id):
-        try:
-            report = Report.objects.create(reporter_id=request.user.id, submission_id=submission_id, reason=request.data.get('reason', ''))
-        except IntegrityError as error:
-            raise ValidationError('You have already reported this submission.') from error
-        Submission.objects.filter(id=submission_id).update(verification_status='flagged')
-        return Response({'id': str(report.id), 'status': report.status}, status=status.HTTP_201_CREATED)
+class ChallengeLeaderboardView(APIView):
+    permission_classes = [permissions.AllowAny]
 
-
-class ModerationReportsView(APIView):
-    def get(self, request):
-        if not Profile.objects.filter(id=request.user.id, is_moderator=True).exists():
-            return Response({'detail': 'Moderator access required.'}, status=status.HTTP_403_FORBIDDEN)
-        return Response([{
-            'id': str(report.id), 'reporter_id': str(report.reporter_id), 'submission_id': str(report.submission_id),
-            'reason': report.reason, 'status': report.status, 'created_at': report.created_at,
-            'username': ensure_profile(report.reporter_id).username, 'submission_payload': report.submission.submission_payload,
-        } for report in Report.objects.select_related('submission').order_by('-created_at')])
-
-
-class ModerationReportStatusView(APIView):
-    def patch(self, request, report_id):
-        if not Profile.objects.filter(id=request.user.id, is_moderator=True).exists():
-            return Response({'detail': 'Moderator access required.'}, status=status.HTTP_403_FORBIDDEN)
-        report = Report.objects.get(id=report_id)
-        report.status = request.data.get('status', report.status)
-        report.save(update_fields=['status'])
-        return Response({'status': report.status})
-
-
-class ModerationVerificationView(APIView):
-    def patch(self, request, submission_id):
-        if not Profile.objects.filter(id=request.user.id, is_moderator=True).exists():
-            return Response({'detail': 'Moderator access required.'}, status=status.HTTP_403_FORBIDDEN)
-        submission = Submission.objects.get(id=submission_id)
-        submission.verification_status = request.data.get('status', submission.verification_status)
-        submission.save(update_fields=['verification_status'])
-        recompute_submission(submission)
-        return Response(submission_data(submission))
-
-
-class LeaderboardView(APIView):
-    def get(self, request, challenge_id=None):
-        submissions = Submission.objects.select_related('challenge').filter(verification_status__in=['verified', 'pending'] if challenge_id else ['verified', 'pending'])
-        if challenge_id:
-            submissions = submissions.filter(challenge_id=challenge_id)
-        entries = []
-        for submission in submissions:
-            audit = submission.score_audits.first() or recompute_submission(submission)
-            entries.append({'submission_id': str(submission.id), 'user_id': str(submission.user_id), 'final_score': float(audit.computed_final_score), 'verification_status': submission.verification_status, 'breakdown': audit.breakdown})
-        return Response(sorted(entries, key=lambda item: item['final_score'], reverse=True))
-
-
-class ScoreBreakdownView(APIView):
-    def get(self, request, submission_id):
-        audit = ScoreAuditLog.objects.filter(submission_id=submission_id).first()
-        if not audit:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response({'submission_id': str(submission_id), 'final_score': float(audit.computed_final_score), **audit.breakdown, 'computed_at': audit.computed_at})
+    def get(self, request, challenge_id):
+        get_object_or_404(Challenge, pk=challenge_id)
+        submissions = Submission.objects.filter(
+            participation__challenge_id=challenge_id,
+            merit_score__isnull=False,
+        ).select_related('participation').order_by('-merit_score', 'submitted_at')
+        return Response([
+            {
+                'rank': index,
+                'submission_id': str(submission.id),
+                'participation_id': str(submission.participation_id),
+                'user_id': str(submission.participation.user_id),
+                'merit_score': float(submission.merit_score),
+                'submitted_at': submission.submitted_at,
+            }
+            for index, submission in enumerate(submissions, start=1)
+        ])
 
 
 class ProfileView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_profile(self, request, user_id):
+        profile, _ = Profile.objects.get_or_create(
+            id=user_id,
+            defaults={'username': f'user_{str(user_id)[:8]}'},
+        )
+        return profile
+
     def get(self, request, user_id):
-        return Response(profile_data(ensure_profile(user_id)))
+        return Response(ProfileSerializer(self.get_profile(request, user_id)).data)
 
     def patch(self, request, user_id):
         if str(request.user.id) != str(user_id):
             return Response({'detail': 'You can only update your own profile.'}, status=status.HTTP_403_FORBIDDEN)
-        profile = ensure_profile(user_id)
-        for field in ('username', 'avatar_url', 'bio'):
-            if field in request.data:
-                setattr(profile, field, request.data[field])
-        profile.save(update_fields=['username', 'avatar_url', 'bio'])
-        return Response(profile_data(profile))
+        profile = self.get_profile(request, user_id)
+        serializer = ProfileSerializer(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
-class ProfileByUsernameView(APIView):
-    def get(self, request, username):
-        try:
-            profile = Profile.objects.get(username=username)
-        except Profile.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(profile_data(profile))
+class AdminLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = authenticate_admin(request.data.get('username', ''), request.data.get('password', ''))
+        if not token:
+            return Response({'detail': 'Invalid administrator credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'token': token, 'username': request.data.get('username', '')})
 
 
-class CommentView(APIView):
-    def post(self, request, submission_id):
-        submission = Submission.objects.get(id=submission_id)
-        if submission.user_id == request.user.id and request.data.get('endorsement', False):
-            raise ValidationError('You cannot endorse your own submission.')
-        comment = Comment.objects.create(user_id=request.user.id, submission=submission, text=request.data.get('text', '').strip())
-        return Response({'id': str(comment.id), 'text': comment.text, 'created_at': comment.created_at}, status=status.HTTP_201_CREATED)
+class AdminDashboardView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        from .models import AnomalyFlag, AuditEvent
+        return Response({
+            'challenge_count': Challenge.objects.count(),
+            'submission_count': Submission.objects.count(),
+            'open_anomaly_count': AnomalyFlag.objects.filter(status=AnomalyFlag.Status.OPEN).count(),
+            'recent_events': list(AuditEvent.objects.order_by('-created_at').values(
+                'event_type', 'actor_id', 'created_at', 'metadata'
+            )[:25]),
+        })
