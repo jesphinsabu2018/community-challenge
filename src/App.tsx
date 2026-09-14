@@ -40,7 +40,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[#F7FAF8]">
       <Navbar currentPage={page} onNavigate={navigate} />
       <main>
         {page === 'auth' && <AuthPage />}
@@ -52,9 +52,12 @@ function AppContent() {
         {page === 'profile' && <ProfilePage onNavigate={navigate} />}
         {page === 'moderation' && <ModerationPage onNavigate={navigate} />}
       </main>
-      <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-400">
-        FairPlay — Fair competition, ranked by merit not popularity
-      </footer>
+      <footer className="border-t border-slate-200 bg-white py-8 text-center text-sm text-slate-500">
+  <p className="font-semibold text-slate-700">FairPlay</p>
+  <p className="mt-1">
+    Fair competition, ranked by merit — not popularity.
+  </p>
+</footer>
     </div>
   );
 }

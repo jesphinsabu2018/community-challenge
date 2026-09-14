@@ -1,139 +1,221 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Trophy, Mail, Lock, User, AlertCircle } from 'lucide-react';
+import { Trophy, Mail, Lock, User, ArrowRight, Zap } from 'lucide-react';
 
 export function AuthPage() {
   const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signup');
+
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+
     setLoading(true);
+    setError('');
+
     try {
-      if (mode === 'signup') {
-        if (!username.trim()) throw new Error('Username is required');
-        await signUp(email, password, username.trim());
+      if (isSignUp) {
+        await signUp(email, password, username);
       } else {
         await signIn(email, password);
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Authentication failed';
-      setError(msg.includes('already') ? 'An account with this email already exists. Try signing in.' : msg);
+    } catch (err: any) {
+      setError(err?.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 bg-gradient-to-b from-slate-50 to-emerald-50/30">
-      <div className="w-full max-w-md">
+    <div className="min-h-[calc(100vh-72px)] bg-[#0B1020] flex items-center justify-center px-4 py-12">
+
+      {/* Background glow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-1/4 w-72 h-72 bg-violet-600/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-1/4 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-md">
+
+        {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-200">
-            <Trophy className="w-8 h-8 text-white" />
+          <div className="inline-flex relative">
+
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-xl shadow-purple-500/30">
+              <Trophy className="w-8 h-8 text-white" />
+            </div>
+
+            <Zap className="absolute -top-2 -right-2 w-5 h-5 text-cyan-300 fill-cyan-300" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">
-            {mode === 'signup' ? 'Join the Competition' : 'Welcome Back'}
+
+          <h1 className="mt-5 text-3xl font-bold text-white">
+            Welcome to Fair<span className="text-violet-400">Play</span>
           </h1>
-          <p className="text-slate-500 mt-1 text-sm">
-            {mode === 'signup'
-              ? 'Compete fairly across challenges that matter'
-              : 'Sign in to continue competing'}
+
+          <p className="mt-2 text-slate-400">
+            Compete fairly. Prove yourself. Rise.
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-6">
+        {/* Card */}
+        <div className="bg-[#11182B] border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl">
+
+          {/* Tabs */}
+          <div className="grid grid-cols-2 bg-[#0B1020] rounded-xl p-1 mb-7">
+
             <button
-              onClick={() => setMode('signup')}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
-                mode === 'signup' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
-              }`}
-            >
-              Sign Up
-            </button>
-            <button
-              onClick={() => setMode('signin')}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
-                mode === 'signin' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
+              type="button"
+              onClick={() => {
+                setIsSignUp(false);
+                setError('');
+              }}
+              className={`py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                !isSignUp
+                  ? 'bg-violet-600 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
               Sign In
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(true);
+                setError('');
+              }}
+              className={`py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                isSignUp
+                  ? 'bg-violet-600 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Create Account
+            </button>
+
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'signup' && (
+          <form onSubmit={handleSubmit} className="space-y-5">
+
+            {/* Username */}
+            {isSignUp && (
               <div>
-                <label className="text-sm font-medium text-slate-600 mb-1.5 block">Username</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Username
+                </label>
+
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Your display name"
-                    className="w-full pl-10 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+                    placeholder="Choose a username"
                     required
+                    className="w-full bg-[#0B1020] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white placeholder-slate-600 outline-none transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                   />
                 </div>
               </div>
             )}
+
+            {/* Email */}
             <div>
-              <label className="text-sm font-medium text-slate-600 mb-1.5 block">Email</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Email
+              </label>
+
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full pl-10 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
                   required
+                  className="w-full bg-[#0B1020] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white placeholder-slate-600 outline-none transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                 />
               </div>
             </div>
+
+            {/* Password */}
             <div>
-              <label className="text-sm font-medium text-slate-600 mb-1.5 block">Password</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Password
+              </label>
+
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className="w-full pl-10 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+                  placeholder="Enter your password"
                   required
                   minLength={6}
+                  className="w-full bg-[#0B1020] border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white placeholder-slate-600 outline-none transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                 />
               </div>
             </div>
 
+            {/* Error */}
             {error && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 text-red-600 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                 {error}
               </div>
             )}
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm"
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-semibold shadow-lg shadow-purple-500/20 hover:from-violet-500 hover:to-purple-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Please wait...' : mode === 'signup' ? 'Create Account' : 'Sign In'}
+              {loading
+                ? 'Please wait...'
+                : isSignUp
+                ? 'Create Account'
+                : 'Sign In'}
+
+              {!loading && <ArrowRight className="w-4 h-4" />}
             </button>
+
           </form>
+
+          {/* Bottom text */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-slate-500">
+              {isSignUp
+                ? 'Already have an account?'
+                : "Don't have an account?"}{' '}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setError('');
+                }}
+                className="font-semibold text-violet-400 hover:text-violet-300"
+              >
+                {isSignUp ? 'Sign in' : 'Create one'}
+              </button>
+            </p>
+          </div>
+
         </div>
 
-        <p className="text-center text-xs text-slate-400 mt-4">
-          Fair scoring. No popularity contests. Real achievement wins.
+        {/* Footer */}
+        <p className="text-center text-xs text-slate-600 mt-6">
+          Fair competition • Merit over popularity
         </p>
+
       </div>
     </div>
   );

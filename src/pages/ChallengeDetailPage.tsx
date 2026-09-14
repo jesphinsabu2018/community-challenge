@@ -112,105 +112,302 @@ export function ChallengeDetailPage({ challengeId, onNavigate }: ChallengeDetail
         Back
       </button>
 
-      {/* Challenge Header */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-6">
-        <div className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                {challenge.category}
-              </span>
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-                {challenge.difficulty_tier} ({challenge.difficulty_weight}x)
-              </span>
-              {challenge.requires_verification && (
-                <span className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200">
-                  <Lock className="w-3 h-3" />
-                  Verified
-                </span>
-              )}
-            </div>
-          </div>
+      {/* ============================================================
+    CHALLENGE HEADER — STEP 7
+    ============================================================ */}
+<div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm mb-7">
 
-          <h1 className="text-2xl font-bold text-slate-800 mb-2">{challenge.title}</h1>
-          <p className="text-slate-600 mb-4">{challenge.description}</p>
+  {/* Decorative background */}
+  <div className="absolute inset-0 pointer-events-none overflow-hidden">
+    <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-emerald-100/60 blur-3xl" />
+    <div className="absolute -bottom-32 -left-24 w-80 h-80 rounded-full bg-cyan-100/50 blur-3xl" />
+  </div>
 
-          {challenge.rules && (
-            <div className="bg-slate-50 rounded-lg p-4 mb-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-1">Rules</h3>
-              <p className="text-sm text-slate-600 whitespace-pre-wrap">{challenge.rules}</p>
-            </div>
-          )}
+  <div className="relative p-6 sm:p-8">
 
-          <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <Users className="w-4 h-4" />
-              {challenge.participant_count} participants
-            </span>
-            {deadline && (
-              <span className={`flex items-center gap-1.5 ${isExpired ? 'text-red-500' : ''}`}>
-                <Clock className="w-4 h-4" />
-                {isExpired ? 'Ended' : `Due ${deadline.toLocaleDateString()}`}
-              </span>
-            )}
-            <span className="flex items-center gap-1.5">
-              <Trophy className="w-4 h-4" />
-              Submission: {challenge.submission_type}
-            </span>
-          </div>
+    {/* Top row */}
+    <div className="flex items-start justify-between gap-4 mb-6">
 
-          {challenge.benchmark_value && (
-            <div className="mt-3 text-sm text-slate-500">
-              Benchmark: {challenge.benchmark_value} {challenge.benchmark_unit ?? ''}
-            </div>
-          )}
+      {/* Back button */}
+      <button
+        onClick={() => onNavigate('home')}
+        className="group inline-flex items-center gap-2 px-3.5 py-2 rounded-xl
+                   border border-slate-200 bg-white/80 backdrop-blur-sm
+                   text-sm font-medium text-slate-600
+                   hover:text-slate-900 hover:border-slate-300
+                   hover:shadow-sm transition-all"
+      >
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+        Back
+      </button>
+
+      {/* Challenge status */}
+      <div className="flex items-center gap-2">
+
+        {isExpired ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                           bg-red-50 border border-red-100
+                           text-xs font-semibold text-red-600">
+            <Clock className="w-3.5 h-3.5" />
+            Ended
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                           bg-emerald-50 border border-emerald-100
+                           text-xs font-semibold text-emerald-600">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Active
+          </span>
+        )}
+
+      </div>
+    </div>
+
+    {/* Category + difficulty */}
+    <div className="flex flex-wrap items-center gap-2.5 mb-5">
+
+      <span className="inline-flex items-center px-3 py-1.5 rounded-full
+                       bg-emerald-50 text-emerald-700
+                       border border-emerald-100
+                       text-xs font-bold uppercase tracking-wide">
+        {challenge.category}
+      </span>
+
+      <span className="inline-flex items-center px-3 py-1.5 rounded-full
+                       bg-slate-100 text-slate-600
+                       border border-slate-200
+                       text-xs font-semibold">
+        {challenge.difficulty_tier}
+        <span className="ml-1 text-slate-400">
+          · {challenge.difficulty_weight}x
+        </span>
+      </span>
+
+      {challenge.requires_verification && (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                         bg-violet-50 text-violet-700
+                         border border-violet-100
+                         text-xs font-semibold">
+          <Lock className="w-3.5 h-3.5" />
+          Verified
+        </span>
+      )}
+    </div>
+
+    {/* Title */}
+    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight
+                   text-slate-900 leading-tight max-w-3xl">
+      {challenge.title}
+    </h1>
+
+    {/* Description */}
+    <p className="mt-3 text-base sm:text-lg leading-7
+                  text-slate-500 max-w-3xl">
+      {challenge.description}
+    </p>
+
+    {/* Challenge information */}
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-7">
+
+      {/* Participants */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+        <div className="flex items-center gap-2 text-slate-400 mb-2">
+          <Users className="w-4 h-4" />
+          <span className="text-xs font-medium">Participants</span>
         </div>
 
-        {/* Action Bar */}
-        <div className="border-t border-slate-200 p-4 bg-slate-50">
-          {!user ? (
-            <button
-              onClick={() => onNavigate('auth')}
-              className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
-            >
-              Sign in to participate
-            </button>
-          ) : isCreator ? (
-            <div className="text-center text-sm text-slate-500 py-1">
-              You created this challenge
-            </div>
-          ) : hasSubmitted ? (
-            <div className="flex items-center justify-center gap-2 text-sm text-emerald-600 font-medium py-1">
-              <CheckCircle2 className="w-5 h-5" />
-              Submission complete — {mySubmission?.verification_status}
-            </div>
-          ) : hasJoined ? (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowSubmitForm(true)}
-                disabled={isExpired}
-                className="flex-1 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isExpired ? 'Challenge Ended' : 'Submit Proof'}
-              </button>
-              <button
-                onClick={handleLeave}
-                className="px-4 py-2.5 rounded-lg border border-slate-200 text-slate-500 text-sm font-medium hover:bg-slate-100"
-              >
-                Leave
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={handleJoin}
-              disabled={isExpired}
-              className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {isExpired ? 'Challenge Ended' : 'Join Challenge'}
-            </button>
-          )}
+        <p className="text-lg font-bold text-slate-800">
+          {challenge.participant_count}
+        </p>
+      </div>
+
+      {/* Deadline */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+        <div className="flex items-center gap-2 text-slate-400 mb-2">
+          <Clock className="w-4 h-4" />
+          <span className="text-xs font-medium">Deadline</span>
+        </div>
+
+        <p className={`text-sm font-bold ${
+          isExpired ? 'text-red-500' : 'text-slate-800'
+        }`}>
+          {deadline
+            ? deadline.toLocaleDateString()
+            : 'No deadline'}
+        </p>
+      </div>
+
+      {/* Submission */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+        <div className="flex items-center gap-2 text-slate-400 mb-2">
+          <Upload className="w-4 h-4" />
+          <span className="text-xs font-medium">Submission</span>
+        </div>
+
+        <p className="text-sm font-bold text-slate-800 capitalize">
+          {challenge.submission_type}
+        </p>
+      </div>
+
+      {/* Difficulty */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+        <div className="flex items-center gap-2 text-slate-400 mb-2">
+          <Trophy className="w-4 h-4" />
+          <span className="text-xs font-medium">Difficulty</span>
+        </div>
+
+        <p className="text-sm font-bold text-slate-800">
+          {challenge.difficulty_tier}
+        </p>
+      </div>
+
+    </div>
+
+    {/* Benchmark */}
+    {challenge.benchmark_value && (
+      <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-2xl
+                      bg-amber-50 border border-amber-100">
+
+        <div className="w-9 h-9 rounded-xl bg-amber-100
+                        flex items-center justify-center flex-shrink-0">
+          <Trophy className="w-4 h-4 text-amber-600" />
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">
+            Benchmark to beat
+          </p>
+
+          <p className="text-sm font-bold text-amber-900">
+            {challenge.benchmark_value}{' '}
+            {challenge.benchmark_unit ?? ''}
+          </p>
         </div>
       </div>
+    )}
+
+    {/* Rules */}
+    {challenge.rules && (
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+
+        <h3 className="text-sm font-bold text-slate-800 mb-2">
+          Challenge Rules
+        </h3>
+
+        <p className="text-sm leading-6 text-slate-500 whitespace-pre-wrap">
+          {challenge.rules}
+        </p>
+      </div>
+    )}
+
+  </div>
+
+  {/* ============================================================
+      ACTION BAR
+      ============================================================ */}
+  <div className="relative border-t border-slate-200 bg-slate-50/80 px-6 sm:px-8 py-5">
+
+    {!user ? (
+
+      <button
+        onClick={() => onNavigate('auth')}
+        className="w-full py-3.5 rounded-2xl
+                   bg-slate-900 text-white
+                   text-sm font-bold
+                   hover:bg-slate-800
+                   shadow-sm hover:shadow-md
+                   transition-all"
+      >
+        Sign in to participate
+      </button>
+
+    ) : isCreator ? (
+
+      <div className="flex items-center justify-center gap-2 py-2
+                      text-sm font-medium text-slate-500">
+        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+        You created this challenge
+      </div>
+
+    ) : hasSubmitted ? (
+
+      <div className="flex flex-col sm:flex-row
+                      items-center justify-center gap-2 py-2">
+
+        <div className="flex items-center gap-2
+                        text-sm font-semibold text-emerald-600">
+          <CheckCircle2 className="w-5 h-5" />
+          Submission complete
+        </div>
+
+        <span className="hidden sm:block text-slate-300">
+          •
+        </span>
+
+        <span className="text-xs font-medium text-slate-500 capitalize">
+          {mySubmission?.verification_status}
+        </span>
+
+      </div>
+
+    ) : hasJoined ? (
+
+      <div className="flex flex-col sm:flex-row gap-3">
+
+        <button
+          onClick={() => setShowSubmitForm(true)}
+          disabled={isExpired}
+          className="flex-1 py-3.5 rounded-2xl
+                     bg-emerald-600 text-white
+                     text-sm font-bold
+                     shadow-sm
+                     hover:bg-emerald-700
+                     hover:shadow-md
+                     disabled:opacity-50
+                     disabled:cursor-not-allowed
+                     transition-all"
+        >
+          {isExpired ? 'Challenge Ended' : 'Submit Proof'}
+        </button>
+
+        <button
+          onClick={handleLeave}
+          className="sm:w-32 py-3.5 rounded-2xl
+                     border border-slate-200
+                     bg-white text-slate-600
+                     text-sm font-semibold
+                     hover:bg-slate-100
+                     hover:border-slate-300
+                     transition-all"
+        >
+          Leave
+        </button>
+
+      </div>
+
+    ) : (
+
+      <button
+        onClick={handleJoin}
+        disabled={isExpired}
+        className="w-full py-3.5 rounded-2xl
+                   bg-emerald-600 text-white
+                   text-sm font-bold
+                   shadow-sm
+                   hover:bg-emerald-700
+                   hover:shadow-md
+                   disabled:opacity-50
+                   disabled:cursor-not-allowed
+                   transition-all"
+      >
+        {isExpired ? 'Challenge Ended' : 'Join Challenge'}
+      </button>
+
+    )}
+
+  </div>
+
+</div>
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-4 max-w-xs">
